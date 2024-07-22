@@ -1,0 +1,75 @@
+name: Test and Release
+on:
+  push:
+
+# cancel a currently running workflow from the same PR, branch or tag
+# https://stackoverflow.com/questions/66335225/how-to-cancel-previous-runs-in-the-pr-when-you-push-new-commitsupdate-the-curre
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  base_tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        go-version: [ '1.22' ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Build and Test
+        run: |
+          go test -count 1 ./...
+          mkdir -p build/linux-amd64
+          GOOS=linux GOARCH=amd64 go build -o build/linux-amd64/empired ./service
+          GOOS=linux GOARCH=arm64 go build -o build/linux-arm64/empired ./service
+      - name: Archive Linux AMD64
+        uses: actions/upload-artifact@v4
+        with:
+          name: "linux-amd64"
+          path: build/linux-amd64
+      - name: Archive Linux ARM64
+        uses: actions/upload-artifact@v4
+        with:
+          name: "linux-arm64"
+          path: build/linux-arm64
+  # Build job
+  deploy:
+    needs: base_tests
+    runs-on: ubuntu-latest
+    # needed for version bumping
+    permissions:
+      contents: write
+    container:
+      image: catthehacker/ubuntu:act-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@v1 # Don't use @master or @v1 unless you're happy to test the latest version
+        id: version
+        env:
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          GIT_API_TAGGING: false
+      - name: "Setup Environment"
+        run: |
+          echo "BRANCH=${{ steps.version.outputs.tag }}" |sed 's/v//g' >> $GITHUB_ENV
+      - uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            linux-amd64
+            linux-arm64
