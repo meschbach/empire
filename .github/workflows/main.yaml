@@ -61,10 +61,13 @@ jobs:
           DEFAULT_BUMP: patch
           GIT_API_TAGGING: false
       - uses: actions/download-artifact@v4
+        with:
+          path: build
       - name: "Setup Environment"
         run: |
           echo "BRANCH=${{ steps.version.outputs.tag }}" |sed 's/v//g' >> $GITHUB_ENV
-          find .
+          tar zcvf linux-amd64.tar.gz -C build linux-amd64
+          tar zcvf linux-arm64.tar.gz -C build linux-arm64
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -72,5 +75,5 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
-            linux-amd64
-            linux-arm64
+            linux-amd64.tar.gz
+            linux-arm64.tar.gz
