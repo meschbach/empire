@@ -135,6 +135,7 @@ func (a *ModuleEnv) CopyFile(source string, target string, copy CopyOpt) error {
 	return nil
 }
 
+// resolve goes through each resource, attempting to perform the requested actions
 func (a *ModuleEnv) resolve(cfg *File) error {
 	var problems []error
 	for _, dir := range cfg.Directory {
